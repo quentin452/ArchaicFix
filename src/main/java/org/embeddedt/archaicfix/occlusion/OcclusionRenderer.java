@@ -155,7 +155,7 @@ public class OcclusionRenderer {
             OcclusionHelpers.worker.dirty = true;
         }
     }
-
+/*
     public boolean skipRenderingIfNotVisible(RenderManager instance, Entity entity, float tick) {
         WorldRenderer rend = getRenderer(entity.posX, entity.posY, entity.posZ);
         if (rend != null && !rend.isVisible) {
@@ -165,6 +165,8 @@ public class OcclusionRenderer {
         }
         return RenderManager.instance.renderEntitySimple(entity, tick);
     }
+
+ */
 
     public String getDebugInfoRenders() {
         StringBuilder r = new StringBuilder(3 + 4 + 1 + 4 + 1 + 6 + 5 + 4 + 5 + 4 + 5 + 4 + 5 + 4 + 5 + 3 + 5 + 3 + 5 + 4);

@@ -28,11 +28,13 @@ public abstract class MixinRenderGlobal {
         ci.cancel();
         OcclusionHelpers.renderer.handleOffthreadUpdate(x1, y1, z1, x2, y2, z2);
     }
-
+/*
     @Redirect(method = "renderEntities", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/RenderManager;renderEntitySimple(Lnet/minecraft/entity/Entity;F)Z"))
     private boolean skipRenderingIfNotVisible(RenderManager instance, Entity entity, float tick) {
         return OcclusionHelpers.renderer.skipRenderingIfNotVisible(instance, entity, tick);
     }
+
+ */
 
     /**
      * @author skyboy, embeddedt
