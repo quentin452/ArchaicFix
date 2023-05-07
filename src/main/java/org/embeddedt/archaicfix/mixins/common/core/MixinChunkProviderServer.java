@@ -26,7 +26,7 @@ public abstract class MixinChunkProviderServer {
     private boolean neverLoadSpawn(int dim) {
         return !ArchaicConfig.disableSpawnChunks && DimensionManager.shouldLoadSpawn(dim);
     }
-
+/*
     @Redirect(method = "originalLoadChunk", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/chunk/IChunkProvider;provideChunk(II)Lnet/minecraft/world/chunk/Chunk;", remap = true), remap = false)
     private Chunk populateChunkWithBiomes(IChunkProvider instance, int chunkX, int chunkZ) {
         Chunk chunk = instance.provideChunk(chunkX, chunkZ);
@@ -40,4 +40,6 @@ public abstract class MixinChunkProviderServer {
         }
         return chunk;
     }
+
+ */
 }
