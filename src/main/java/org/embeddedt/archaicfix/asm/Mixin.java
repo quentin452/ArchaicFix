@@ -4,6 +4,7 @@ import cpw.mods.fml.relauncher.FMLLaunchHandler;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.embeddedt.archaicfix.config.ArchaicConfig;
+import org.embeddedt.archaicfix.helpers.DragonAPIHelper;
 
 import java.util.Collection;
 import java.util.List;
@@ -132,9 +133,16 @@ public enum Mixin {
 
     client_journeymap_MixinTileDrawStep(Side.CLIENT, Phase.LATE, require(TargetedMod.JOURNEYMAP).and(m -> ArchaicConfig.removeJourneymapDebug), "journeymap.MixinTileDrawStep"),
 
+    client_aoa_MixinProjectileEntities(Side.CLIENT, Phase.LATE, require(TargetedMod.AOA), "aoa.MixinProjectileEntities"),
+
     common_am2_MixinPlayerTracker(Side.COMMON, Phase.LATE, require(TargetedMod.AM2), "am2.MixinPlayerTracker"),
 
-    common_foodplus_MixinUpdater(Side.COMMON, Phase.LATE, require(TargetedMod.FOODPLUS).and(m -> ArchaicConfig.disableFoodPlusUpdates), "foodplus.MixinUpdater")
+    common_foodplus_MixinUpdater(Side.COMMON, Phase.LATE, require(TargetedMod.FOODPLUS).and(m -> ArchaicConfig.disableFoodPlusUpdates), "foodplus.MixinUpdater"),
+
+    /** This mixin will ostensibly be unnecessary after DragonAPI V31b */
+    common_dragonapi_MixinReikaWorldHelper(Side.COMMON, Phase.LATE, m -> DragonAPIHelper.isVersionInInclusiveRange(0, 'a', 31, 'b') && !Boolean.valueOf(System.getProperty("archaicFix.disableFastReikaWorldHelper", "false")), "dragonapi.MixinReikaWorldHelper"),
+
+    common_diversity_MixinServerHandler(Side.COMMON, Phase.LATE, require(TargetedMod.DIVERSITY), "diversity.MixinServerHandler")
 
     // The modFilter argument is a predicate, so you can also use the .and(), .or(), and .negate() methods to mix and match multiple predicates.
     ;
