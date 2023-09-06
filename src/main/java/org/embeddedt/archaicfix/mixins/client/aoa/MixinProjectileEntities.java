@@ -34,13 +34,15 @@ public abstract class MixinProjectileEntities extends EntityThrowable {
         super(worldIn);
         throw new RuntimeException();
     }
-
+// fixme todo , CRASH on startup on server wehn AOA and archaicfix are present
     /**
      * @reason AoA spawns particles on the server thread, causing re-entrance issues. Let's make it not do that.
      */
     // Mixin is unwilling to generate a refmap for the target method, so we're using a wildcard.
-    @WrapWithCondition(method = "*()V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/particle/EffectRenderer;addEffect(Lnet/minecraft/client/particle/EntityFX;)V"))
+  /*  @WrapWithCondition(method = "*()V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/particle/EffectRenderer;addEffect(Lnet/minecraft/client/particle/EntityFX;)V"))
     public boolean onlySpawnParticlesOnClientThread(EffectRenderer efr, EntityFX entity) {
         return this.worldObj.isRemote;
     }
+
+   */
 }
