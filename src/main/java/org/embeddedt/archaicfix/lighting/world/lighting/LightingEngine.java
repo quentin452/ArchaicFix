@@ -132,13 +132,7 @@ public class LightingEngine implements ILightingEngine {
      */
     @Override
     public void scheduleLightUpdate(final EnumSkyBlock lightType, final int xIn, final int yIn, final int zIn) {
-        this.acquireLock();
-
-        try {
             this.scheduleLightUpdate(lightType, encodeWorldCoord(xIn, yIn, zIn));
-        } finally {
-            this.releaseLock();
-        }
     }
 
     /**
