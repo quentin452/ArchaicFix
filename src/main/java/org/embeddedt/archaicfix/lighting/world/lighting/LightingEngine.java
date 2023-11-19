@@ -18,6 +18,7 @@ import org.embeddedt.archaicfix.lighting.api.IChunkLighting;
 import org.embeddedt.archaicfix.lighting.api.ILightingEngine;
 import org.embeddedt.archaicfix.lighting.collections.PooledLongQueue;
 
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class LightingEngine implements ILightingEngine {
@@ -226,8 +227,10 @@ public class LightingEngine implements ILightingEngine {
     private void releaseLock() {
         this.lock.unlock();
     }
-
+    private final Lock updateLock = new ReentrantLock();
     private void processLightUpdatesForTypeInner(final EnumSkyBlock lightType, final PooledLongQueue queue) {
+        updateLock.lock();
+        try {
         //avoid nested calls
         if (this.updating) {
             throw new IllegalStateException("Already processing updates!");
@@ -370,6 +373,9 @@ public class LightingEngine implements ILightingEngine {
         this.profiler.endSection();
 
         this.updating = false;
+        } finally {
+            updateLock.unlock();
+        }
     }
 
     /**
