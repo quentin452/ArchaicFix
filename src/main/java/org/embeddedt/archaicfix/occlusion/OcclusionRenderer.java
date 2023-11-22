@@ -341,26 +341,44 @@ public class OcclusionRenderer {
 
         rg.theWorld.theProfiler.startSection("sortchunks");
 
-        if (this.mc.gameSettings.renderDistanceChunks != rg.renderDistanceChunks && !(this.mc.currentScreen instanceof GuiVideoSettings))
-        {
+        if (needsRenderDistanceUpdate()) {
             rg.loadRenderers();
         }
 
         WorldRenderer[] sortedWorldRenderers = rg.sortedWorldRenderers;
+
         if (rg.renderersLoaded > 0) {
-            int e = rg.renderersLoaded - 10;
-            e &= e >> 31;
-            e += 10;
-            for (int j = 0; j < e; ++j) {
+            int limit = Math.max(rg.renderersLoaded - 10, 10);
+            for (int j = 0; j < limit; ++j) {
                 rg.worldRenderersCheckIndex = (rg.worldRenderersCheckIndex + 1) % rg.renderersLoaded;
                 WorldRenderer rend = sortedWorldRenderers[rg.worldRenderersCheckIndex];
 
-                if ((rend.isInFrustum & rend.isVisible) & (rend.needsUpdate || !rend.isInitialized) & !(this.mc.theWorld.getChunkFromBlockCoords(rend.posX, rend.posZ) instanceof EmptyChunk)) {
+                if (shouldAddRendererToUpdateQueue(rend)) {
                     addRendererToUpdateQueue(rend);
                 }
             }
         }
 
+        repositionChunks(cam);
+
+        if (pass == 1) {
+            alphaSortRenderers(view, cam);
+        }
+
+        return renderSorted(pass, tick);
+    }
+
+    private boolean needsRenderDistanceUpdate() {
+        return this.mc.gameSettings.renderDistanceChunks != rg.renderDistanceChunks &&
+                !(this.mc.currentScreen instanceof GuiVideoSettings);
+    }
+
+    private boolean shouldAddRendererToUpdateQueue(WorldRenderer rend) {
+        return (rend.isInFrustum & rend.isVisible) & (rend.needsUpdate || !rend.isInitialized) &
+                !(this.mc.theWorld.getChunkFromBlockCoords(rend.posX, rend.posZ) instanceof EmptyChunk);
+    }
+
+    private void repositionChunks(CameraInfo cam) {
         rg.theWorld.theProfiler.startSection("reposition_chunks");
         if (rg.prevChunkSortX != cam.getChunkCoordX() || rg.prevChunkSortY != cam.getChunkCoordY() || rg.prevChunkSortZ != cam.getChunkCoordZ()) {
             rg.prevChunkSortX = cam.getChunkCoordX();
@@ -370,124 +388,126 @@ public class OcclusionRenderer {
             OcclusionHelpers.worker.dirty = true;
         }
         rg.theWorld.theProfiler.endSection();
+    }
 
-        if(pass == 1){
-            rg.theWorld.theProfiler.startSection("alpha_sort");
-            if(distanceSquared(cam.getX(), cam.getY(), cam.getZ(), rg.prevRenderSortX, rg.prevRenderSortY, rg.prevRenderSortZ) > 1) {
-                rg.prevRenderSortX = cam.getX();
-                rg.prevRenderSortY = cam.getY();
-                rg.prevRenderSortZ = cam.getZ();
-
-                alphaSortProgress = 0;
-            }
-
-            int amt = rg.renderersLoaded < 27 ? rg.renderersLoaded : Math.max(rg.renderersLoaded >> 1, 27);
-            if (alphaSortProgress < amt) {
-                int amountPerFrame = 1;
-                for (int i = 0; i < amountPerFrame && alphaSortProgress < amt; ++i) {
-                    WorldRenderer r = sortedWorldRenderers[alphaSortProgress++];
-                    r.updateRendererSort(view);
-                }
-            }
-            rg.theWorld.theProfiler.endSection();
+    private void alphaSortRenderers(EntityLivingBase view,CameraInfo cam) {
+        rg.theWorld.theProfiler.startSection("alpha_sort");
+        if (distanceSquared(cam.getX(), cam.getY(), cam.getZ(), rg.prevRenderSortX, rg.prevRenderSortY, rg.prevRenderSortZ) > 1) {
+            rg.prevRenderSortX = cam.getX();
+            rg.prevRenderSortY = cam.getY();
+            rg.prevRenderSortZ = cam.getZ();
+            alphaSortProgress = 0;
         }
 
+        int amt = Math.max(rg.renderersLoaded < 27 ? rg.renderersLoaded : rg.renderersLoaded >> 1, 27);
+        if (alphaSortProgress < amt) {
+            int amountPerFrame = 1;
+            for (int i = 0; i < amountPerFrame && alphaSortProgress < amt; ++i) {
+                WorldRenderer r = rg.sortedWorldRenderers[alphaSortProgress++];
+                r.updateRendererSort(view);
+            }
+        }
+        rg.theWorld.theProfiler.endSection();
+    }
+
+    private int renderSorted(int pass, double tick) {
         rg.theWorld.theProfiler.endStartSection("render");
         RenderHelper.disableStandardItemLighting();
-        int k = rg.renderSortedRenderers(0, rg.renderersLoaded, pass, tick);
-
-        rg.theWorld.theProfiler.endSection();
-        return k;
+        return rg.renderSortedRenderers(0, rg.renderersLoaded, pass, tick);
     }
 
     public int sortAndRender(int start, int end, int pass, double tick) {
         CameraInfo cam = CameraInfo.getInstance();
-
         RenderList[] allRenderLists = rg.allRenderLists;
-        for (int i = 0; i < allRenderLists.length; ++i) {
-            allRenderLists[i].resetList();
+
+        // Reset all render lists
+        for (RenderList allRenderList : allRenderLists) {
+            allRenderList.resetList();
         }
 
+        // Set loop parameters based on pass
         int loopStart = start;
         int loopEnd = end;
         byte dir = 1;
-
         if (pass == 1) {
             loopStart = end - 1;
             loopEnd = start - 1;
             dir = -1;
         }
 
+        // Debug info for pass 0 and if debug info is enabled
         if (pass == 0 && mc.gameSettings.showDebugInfo) {
-
             mc.theWorld.theProfiler.startSection("debug_info");
-            int renderersNotInitialized = 0, renderersBeingClipped = 0, renderersBeingOccluded = 0;
-            int renderersBeingRendered = 0, renderersSkippingRenderPass = 0, renderersNeedUpdate = 0;
+            int[] renderersCount = new int[6];
             WorldRenderer[] worldRenderers = rg.worldRenderers;
-            for (int i = 0, e = worldRenderers.length; i < e; ++i) {
-                WorldRenderer rend = worldRenderers[i];
+
+            for (WorldRenderer rend : worldRenderers) {
                 if (!rend.isInitialized) {
-                    ++renderersNotInitialized;
+                    renderersCount[0]++;
                 } else if (!rend.isInFrustum) {
-                    ++renderersBeingClipped;
+                    renderersCount[1]++;
                 } else if (!rend.isVisible) {
-                    ++renderersBeingOccluded;
+                    renderersCount[2]++;
                 } else if (rend.isWaitingOnOcclusionQuery) {
-                    ++renderersSkippingRenderPass;
+                    renderersCount[4]++;
                 } else {
-                    ++renderersBeingRendered;
+                    renderersCount[3]++;
                 }
                 if (rend.needsUpdate) {
-                    ++renderersNeedUpdate;
+                    renderersCount[5]++;
                 }
             }
 
-            rg.dummyRenderInt = renderersNotInitialized;
-            rg.renderersBeingClipped = renderersBeingClipped;
-            rg.renderersBeingOccluded = renderersBeingOccluded;
-            rg.renderersBeingRendered = renderersBeingRendered;
-            rg.renderersSkippingRenderPass = renderersSkippingRenderPass;
-            this.renderersNeedUpdate = renderersNeedUpdate;
+            rg.dummyRenderInt = renderersCount[0];
+            rg.renderersBeingClipped = renderersCount[1];
+            rg.renderersBeingOccluded = renderersCount[2];
+            rg.renderersBeingRendered = renderersCount[3];
+            rg.renderersSkippingRenderPass = renderersCount[4];
+            this.renderersNeedUpdate = renderersCount[5];
             mc.theWorld.theProfiler.endSection();
         }
 
         mc.theWorld.theProfiler.startSection("setup_lists");
-        int glListsRendered = 0, allRenderListsLength = 0;
+        int glListsRendered = 0;
+        int allRenderListsLength = 0;
         WorldRenderer[] sortedWorldRenderers = rg.sortedWorldRenderers;
 
         for (int i = loopStart; i != loopEnd; i += dir) {
             WorldRenderer rend = sortedWorldRenderers[i];
 
-            if (rend.isVisible && rend.isInFrustum & !rend.skipRenderPass[pass]) {
+            if (rend.isVisible && rend.isInFrustum && !rend.skipRenderPass[pass]) {
+                int renderListIndex = -1;
 
-                int renderListIndex;
-
-                l: {
-                    for (int j = 0; j < allRenderListsLength; ++j) {
-                        if (allRenderLists[j].rendersChunk(rend.posXMinus, rend.posYMinus, rend.posZMinus)) {
-                            renderListIndex = j;
-                            break l;
-                        }
+                // Check if renderer belongs to an existing render list
+                for (int j = 0; j < allRenderListsLength; ++j) {
+                    if (allRenderLists[j].rendersChunk(rend.posXMinus, rend.posYMinus, rend.posZMinus)) {
+                        renderListIndex = j;
+                        break;
                     }
+                }
+
+                // Create a new render list if renderer doesn't belong to any existing list
+                if (renderListIndex == -1) {
                     renderListIndex = allRenderListsLength++;
                     allRenderLists[renderListIndex].setupRenderList(rend.posXMinus, rend.posYMinus, rend.posZMinus, cam.getEyeX(), cam.getEyeY(), cam.getEyeZ());
                 }
 
+                // Add renderer to the render list
                 allRenderLists[renderListIndex].addGLRenderList(rend.getGLCallListForPass(pass));
-                ++glListsRendered;
+                glListsRendered++;
             }
         }
 
         mc.theWorld.theProfiler.endStartSection("call_lists");
 
-        {
-            int xSort = MathHelper.floor_double(cam.getX());
-            int zSort = MathHelper.floor_double(cam.getZ());
-            xSort -= xSort & 1023;
-            zSort -= zSort & 1023;
-            Arrays.sort(allRenderLists, new RenderDistanceSorter(xSort, zSort));
-            rg.renderAllRenderLists(pass, tick);
-        }
+        // Sort render lists based on distance and render them
+        int xSort = MathHelper.floor_double(cam.getX());
+        int zSort = MathHelper.floor_double(cam.getZ());
+        xSort -= xSort & 1023;
+        zSort -= zSort & 1023;
+        Arrays.sort(allRenderLists, 0, allRenderListsLength, new RenderDistanceSorter(xSort, zSort));
+        rg.renderAllRenderLists(pass, tick);
+
         mc.theWorld.theProfiler.endSection();
 
         return glListsRendered;
