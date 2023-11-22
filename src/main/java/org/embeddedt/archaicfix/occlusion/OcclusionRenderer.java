@@ -64,6 +64,11 @@ public class OcclusionRenderer {
      * @param wr renderer to add to the list
      */
     private void addRendererToUpdateQueue(WorldRenderer wr) {
+        for(EnumFacing dir : OcclusionHelpers.FACING_VALUES) {
+            Chunk chunk = rg.theWorld.getChunkFromBlockCoords(wr.posX + dir.getFrontOffsetX() * 16, wr.posZ + dir.getFrontOffsetZ() * 16);
+            if(chunk != null && chunk instanceof EmptyChunk)
+                return; // do not allow rendering chunk without neighbors
+        }
         if(!((IWorldRenderer)wr).arch$isInUpdateList()) {
             ((IWorldRenderer)wr).arch$setInUpdateList(true);
             worldRenderersToUpdateList.add(wr);
@@ -293,7 +298,7 @@ public class OcclusionRenderer {
             VisGraph oSides = isChunkEmpty(o) ? OcclusionWorker.DUMMY : ((ICulledChunk)o).getVisibility()[rend.posY >> 4];
             ci.visGraph = oSides;
             ci.vis = oSides.getVisibilityArray();
-            for(EnumFacing dir : EnumFacing.values()) {
+            for(EnumFacing dir : OcclusionHelpers.FACING_VALUES) {
                 WorldRenderer neighbor = getRenderer(
                         rend.posX + dir.getFrontOffsetX() * 16,
                         rend.posY + dir.getFrontOffsetY() * 16,
