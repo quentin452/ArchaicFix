@@ -10,14 +10,10 @@ public class SetVisibility {
 	private static final int COUNT_FACES = OcclusionHelpers.FACING_VALUES.length;
 
 	public static long setManyVisible(long bitSet, Set<EnumFacing> faces) {
-		Iterator<EnumFacing> iterator = faces.iterator();
 
-		while (iterator.hasNext()) {
-			EnumFacing enumfacing = iterator.next();
-			Iterator<EnumFacing> iterator1 = faces.iterator();
+		for (EnumFacing enumfacing : faces) {
 
-			while (iterator1.hasNext()) {
-				EnumFacing enumfacing1 = iterator1.next();
+			for (EnumFacing enumfacing1 : faces) {
 				bitSet = setVisible(bitSet, enumfacing, enumfacing1, true);
 			}
 		}
@@ -41,7 +37,7 @@ public class SetVisibility {
 	}
 
 	public static boolean isVisible(long bitSet, EnumFacing from, EnumFacing to) {
-		return from == null || to == null ? true : (bitSet & (1L << (from.ordinal() + to.ordinal() * COUNT_FACES))) != 0;
+		return from == null || to == null || (bitSet & (1L << (from.ordinal() + to.ordinal() * COUNT_FACES))) != 0;
 	}
 
 	public static String toString(long bitSet) {
@@ -68,9 +64,7 @@ public class SetVisibility {
 			EnumFacing[] aenumfacing1 = OcclusionHelpers.FACING_VALUES;
 			int k = aenumfacing1.length;
 
-			for (int l = 0; l < k; ++l) {
-				EnumFacing enumfacing1 = aenumfacing1[l];
-
+			for (EnumFacing enumfacing1 : aenumfacing1) {
 				if (enumfacing == enumfacing1) {
 					stringbuilder.append("  ");
 				} else {

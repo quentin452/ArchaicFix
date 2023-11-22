@@ -98,9 +98,7 @@ public class VisGraph {
 			visibleBlocks.andNot(visibleBlocks);
 			visibleBlocks.or(opaqueBlocks);
 			IntStack linkedlist = new IntStack(1024, 512);
-			for (int j = 0; j < i; ++j) {
-				int k = edges[j];
-
+			for (int k : edges) {
 				if (!opaqueBlocks.get(k)) {
 					setvisibility = SetVisibility.setManyVisible(setvisibility, computeVisibleFacingsFrom(k, linkedlist));
 				}
@@ -129,13 +127,11 @@ public class VisGraph {
 		blocks.set(index, true);
 
 		EnumFacing[] facings = OcclusionHelpers.FACING_VALUES;
-		int k = facings.length;
 		while (!linkedlist.isEmpty()) {
 			int j = linkedlist.poll();
 			addSides(j, enumset);
 
-			for (int l = 0; l < k; ++l) {
-				EnumFacing face = facings[l];
+			for (EnumFacing face : facings) {
 				int i1 = stepTo(j, face);
 
 				if (i1 >= 0 && !blocks.get(i1)) {
@@ -203,13 +199,13 @@ public class VisGraph {
 
 			return index + Z_OFFSET;
 		case EAST: /* WEST */
-			if ((index >> 0 & 15) == 0) {
+			if ((index & 15) == 0) {
 				return -1;
 			}
 
 			return index - X_OFFSET;
 		case WEST: /* EAST */
-			if ((index >> 0 & 15) == 15) {
+			if ((index & 15) == 15) {
 				return -1;
 			}
 
