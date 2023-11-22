@@ -5,6 +5,7 @@ import cpw.mods.fml.relauncher.Side;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.IBlockAccess;
 import org.embeddedt.archaicfix.block.ThreadedBlockData;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.lang.ref.WeakReference;
 import java.util.WeakHashMap;
 
-@Mixin(Block.class)
+@Mixin(value = Block.class, priority = 300)
 public class MixinBlock {
     @Shadow public Block.SoundType stepSound;
     private WeakReference<MinecraftServer> lastServer = new WeakReference<>(null);
@@ -56,5 +57,13 @@ public class MixinBlock {
             arch$threadBlockData.set(calculated);
         }
         return calculated;
+    }
+    /**
+     * @author embeddedt
+     * @reason Avoid calling getBlock
+     */
+    @Redirect(method = "getLightValue(Lnet/minecraft/world/IBlockAccess;III)I", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/IBlockAccess;getBlock(III)Lnet/minecraft/block/Block;"), require = 0)
+    public Block getLightValue(IBlockAccess world, int x, int y, int z) {
+        return (Block)(Object)this;
     }
 }
