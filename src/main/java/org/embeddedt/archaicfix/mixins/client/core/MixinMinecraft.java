@@ -6,6 +6,8 @@ import net.minecraft.client.gui.GuiScreenWorking;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.settings.GameSettings;
 import net.minecraft.server.integrated.IntegratedServer;
+import net.minecraft.util.Util;
+import org.lwjgl.opengl.Display;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Minecraft.class)
 public abstract class MixinMinecraft {
     @Shadow private IntegratedServer theIntegratedServer;
-
+    @Shadow private boolean fullscreen;
     @Shadow public abstract void loadWorld(WorldClient p_71403_1_);
 
     @Shadow public abstract void displayGuiScreen(GuiScreen p_147108_1_);
@@ -43,7 +45,17 @@ public abstract class MixinMinecraft {
     private void displayWorkingScreen(Minecraft mc, GuiScreen in) {
         mc.displayGuiScreen(new GuiScreenWorking());
     }
-
+    /**
+     * @author embeddedt
+     * @reason fix MC-68754
+     */
+    @Inject(method = "toggleFullscreen", at = @At("RETURN"))
+    private void resetResizeableFlag(CallbackInfo ci) {
+        if (!this.fullscreen && Util.getOSType() == Util.EnumOS.WINDOWS) {
+            Display.setResizable(false);
+            Display.setResizable(true);
+        }
+    }
     @Inject(method = "launchIntegratedServer", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/integrated/IntegratedServer;func_147137_ag()Lnet/minecraft/network/NetworkSystem;", ordinal = 0), cancellable = true)
     private void checkServerStopped(CallbackInfo ci) {
         try
