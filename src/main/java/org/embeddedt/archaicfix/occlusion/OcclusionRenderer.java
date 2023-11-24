@@ -201,27 +201,28 @@ public class OcclusionRenderer {
         rendererUpdateOrderProvider.prepare(worldRenderersToUpdateList);
 
         while (updates < updateLimit && rendererUpdateOrderProvider.hasNext(worldRenderersToUpdateList)) {
-            WorldRenderer worldrenderer = rendererUpdateOrderProvider.next(worldRenderersToUpdateList);
-            ((IWorldRenderer) worldrenderer).arch$setInUpdateList(false);
+            WorldRenderer worldRenderer = rendererUpdateOrderProvider.next(worldRenderersToUpdateList);
+            ((IWorldRenderer) worldRenderer).arch$setInUpdateList(false);
 
-            if (!worldrenderer.isInFrustum || !worldrenderer.isVisible || (OcclusionHelpers.DEBUG_LAZY_CHUNK_UPDATES && !worldrenderer.isWaitingOnOcclusionQuery)) {
+            boolean shouldContinue = !worldRenderer.isInFrustum || !worldRenderer.isVisible || (OcclusionHelpers.DEBUG_LAZY_CHUNK_UPDATES && !worldRenderer.isWaitingOnOcclusionQuery);
+            if (shouldContinue) {
                 continue;
             }
 
-            boolean e = worldrenderer.isWaitingOnOcclusionQuery;
-            worldrenderer.updateRenderer(view);
-            worldrenderer.isVisible &= !e;
-            worldrenderer.isWaitingOnOcclusionQuery = worldrenderer.skipAllRenderPasses() || (mc.theWorld.getChunkFromBlockCoords(worldrenderer.posX, worldrenderer.posZ) instanceof EmptyChunk);
-            // can't add fields, re-use
-            if (worldrenderer.distanceToEntitySquared(view) > 272f) {
+            boolean wasWaitingOnOcclusion = worldRenderer.isWaitingOnOcclusionQuery;
+            worldRenderer.updateRenderer(view);
+            worldRenderer.isVisible &= !wasWaitingOnOcclusion;
+
+            worldRenderer.isWaitingOnOcclusionQuery = worldRenderer.skipAllRenderPasses() || (mc.theWorld.getChunkFromBlockCoords(worldRenderer.posX, worldRenderer.posZ) instanceof EmptyChunk);
+
+            float distanceSquared = worldRenderer.distanceToEntitySquared(view);
+            if (distanceSquared > 272f) {
                 updates++;
 
-                if (!worldrenderer.isWaitingOnOcclusionQuery || deadline != 0 || OcclusionHelpers.DEBUG_LAZY_CHUNK_UPDATES) {
-                    long t = System.nanoTime();
-                    if (t > deadline) {
-                        spareTime = false;
-                        break;
-                    }
+                boolean shouldBreakLoop = !worldRenderer.isWaitingOnOcclusionQuery || deadline != 0 || OcclusionHelpers.DEBUG_LAZY_CHUNK_UPDATES;
+                if (shouldBreakLoop && System.nanoTime() > deadline) {
+                    spareTime = false;
+                    break;
                 }
             }
         }
