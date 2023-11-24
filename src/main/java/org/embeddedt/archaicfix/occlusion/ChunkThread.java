@@ -4,70 +4,53 @@ import net.minecraft.world.chunk.Chunk;
 import org.embeddedt.archaicfix.occlusion.util.LinkedHashList;
 import org.embeddedt.archaicfix.occlusion.util.SynchronizedIdentityLinkedHashList;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
 public class ChunkThread extends Thread {
-    public final List<Chunk> loadedChunks = new ArrayList<>();
-    public final List<Chunk> modifiedChunks = new ArrayList<>();
 
     public ChunkThread() {
+
         super("Chunk Worker");
     }
+
+    public LinkedHashList<Chunk> loaded = new SynchronizedIdentityLinkedHashList<Chunk>();
+    public LinkedHashList<Chunk> modified = new SynchronizedIdentityLinkedHashList<Chunk>();
+
     @Override
     public void run() {
-        while (!Thread.currentThread().isInterrupted()) {
-            processLoadedChunks();
-            processModifiedChunks();
-            updateOcclusionState();
 
-            try {
-                TimeUnit.MILLISECONDS.sleep(30);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    private void processLoadedChunks() {
-        for (int i = 0; i < loadedChunks.size(); i++) {
-            Chunk chunk = ((ICulledChunk) loadedChunks.remove(0)).buildCulledSides();
-            if (chunk != null) {
-                modifiedChunks.add(chunk);
-            }
-            if ((i & 3) == 0) {
-                Thread.yield();
-            }
-        }
-    }
-
-    private void processModifiedChunks() {
-        for (int i = 0; i < modifiedChunks.size(); i++) {
-            Chunk chunk = modifiedChunks.remove(0);
-            if (loadedChunks.contains(chunk)) {
-                continue;
-            }
-            processVisGraphs((ICulledChunk) chunk);
-            if ((i & 7) == 0) {
-                Thread.yield();
-            }
-        }
-    }
-
-    private void processVisGraphs(ICulledChunk chunk) {
-        for (VisGraph graph : chunk.getVisibility()) {
-            if (graph.isDirty()) {
-                long oldVisibility = graph.getVisibility();
-                graph.computeVisibility();
-                if (oldVisibility != graph.getVisibility()) {
-                    OcclusionHelpers.worker.dirty = true;
+        for (;;) {
+            int i = 0;
+            boolean work = false;
+            for (; loaded.size() > 0; ++i) {
+                Chunk chunk = ((ICulledChunk)loaded.shift()).buildCulledSides();
+                if (chunk != null) {
+                    modified.add(chunk);
+                    work = true;
+                }
+                if ((i & 3) == 0) {
+                    yield();
                 }
             }
+            for (i = 0; modified.size() > 0; ++i) {
+                Chunk chunk = modified.shift();
+                if (loaded.contains(chunk)) {
+                    continue;
+                }
+                for (VisGraph graph : ((ICulledChunk)chunk).getVisibility()) {
+                    if (graph.isDirty()) {
+                        long a = graph.getVisibility();
+                        graph.computeVisibility();
+                        work |= a != graph.getVisibility();
+                    }
+                }
+                if ((i & 7) == 0) {
+                    yield();
+                }
+            }
+            OcclusionHelpers.worker.dirty = work;
+            try {
+                Thread.sleep(30);
+            } catch (InterruptedException e) {
+            }
         }
-    }
-
-    private void updateOcclusionState() {
-        OcclusionHelpers.worker.dirty = !modifiedChunks.isEmpty();
     }
 }

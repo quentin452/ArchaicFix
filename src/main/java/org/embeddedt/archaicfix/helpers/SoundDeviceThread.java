@@ -12,7 +12,6 @@ import org.lwjgl.openal.ALC10;
 import org.lwjgl.openal.ALCdevice;
 
 import java.nio.IntBuffer;
-import java.util.concurrent.TimeUnit;
 
 public class SoundDeviceThread extends Thread {
     private static final int ALC_CONNECTED = 0x313;
@@ -54,7 +53,7 @@ public class SoundDeviceThread extends Thread {
                     }
                 }
                 try {
-                    TimeUnit.MILLISECONDS.sleep(1000);
+                    Thread.sleep(1000);
                 } catch(InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }

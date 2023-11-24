@@ -15,9 +15,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.sql.Time;
-import java.util.concurrent.TimeUnit;
-
 @Mixin(Minecraft.class)
 public abstract class MixinMinecraft {
     @Shadow private IntegratedServer theIntegratedServer;
@@ -63,7 +60,7 @@ public abstract class MixinMinecraft {
     private void checkServerStopped(CallbackInfo ci) {
         try
         {
-            TimeUnit.MILLISECONDS.sleep(200L);
+            Thread.sleep(200L);
         }
         catch (InterruptedException interruptedexception)
         {

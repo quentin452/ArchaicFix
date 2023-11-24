@@ -77,13 +77,13 @@ public abstract class MixinChunk implements ICulledChunk {
     @Inject(method = "func_150807_a", at = @At("RETURN"))
     private void onSetBlock(int x, int y, int z, Block block, int meta, CallbackInfoReturnable<Boolean> cir) {
         if(cir.getReturnValue() && this.worldObj.isRemote && checkPosSolid(x & 15, y, z & 15, block)) {
-            worker.modifiedChunks.add((Chunk)(Object)this);
+            worker.modified.add((Chunk)(Object)this);
         }
     }
 
     @Inject(method = "fillChunk", at = @At("RETURN"))
     private void onFillChunk(byte[] p_76607_1_, int p_76607_2_, int p_76607_3_, boolean p_76607_4_, CallbackInfo ci) {
-        worker.loadedChunks.add((Chunk)(Object)this);
+        worker.loaded.add((Chunk)(Object)this);
     }
 
 }
