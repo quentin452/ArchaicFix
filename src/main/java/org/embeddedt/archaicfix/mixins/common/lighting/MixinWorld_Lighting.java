@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.Set;
 
-@Mixin(World.class)
+@Mixin(value = World.class,priority = 999)
 public abstract class MixinWorld_Lighting implements ILightingEngineProvider {
     @Shadow protected Set activeChunkSet;
 
