@@ -18,7 +18,6 @@ public enum Mixin {
     common_core_AccessorEntityLiving(Side.COMMON, Phase.EARLY, always(), "core.AccessorEntityLiving"),
     common_core_MixinEntityPlayerMP(Side.COMMON, Phase.EARLY, always(), "core.MixinEntityPlayerMP"),
     common_core_MixinWorldServer(Side.COMMON, Phase.EARLY, always(), "core.MixinWorldServer"),
-    common_core_MixinMapGenStructure(Side.COMMON, Phase.EARLY, always(), "core.MixinMapGenStructure"),
     common_core_MixinEntityVillager(Side.COMMON, Phase.EARLY, always(), "core.MixinEntityVillager"),
     common_core_MixinMerchantRecipe(Side.COMMON, Phase.EARLY, always(), "core.MixinMerchantRecipe"),
     common_core_MixinAxisAlignedBB(Side.COMMON, Phase.EARLY, always(), "core.MixinAxisAlignedBB"),
