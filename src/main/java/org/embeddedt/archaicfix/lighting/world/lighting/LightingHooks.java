@@ -370,14 +370,19 @@ public class LightingHooks {
     }
 
     public static void checkChunkLighting(final Chunk chunk, final World world) {
+        // Early return if the chunk is not light initialized
         if (!((IChunkLightingData) chunk).isLightInitialized()) {
             initChunkLighting(chunk, world);
+            return;
         }
+
+        int chunkX = chunk.xPosition;
+        int chunkZ = chunk.zPosition;
 
         for (int x = -1; x <= 1; ++x) {
             for (int z = -1; z <= 1; ++z) {
-                if (x != 0 || z != 0) {
-                    Chunk nChunk = LightingEngineHelpers.getLoadedChunk(world.getChunkProvider(), chunk.xPosition + x, chunk.zPosition + z);
+                if ((x != 0 || z != 0)) {
+                    Chunk nChunk = LightingEngineHelpers.getLoadedChunk(world.getChunkProvider(), chunkX + x, chunkZ + z);
 
                     if (nChunk == null || !((IChunkLightingData) nChunk).isLightInitialized()) {
                         return;
@@ -385,7 +390,6 @@ public class LightingHooks {
                 }
             }
         }
-
         chunk.isLightPopulated = true;
     }
 
@@ -429,6 +433,9 @@ public class LightingHooks {
      */
     public static int getIntrinsicOrSavedBlockLightValue(Chunk chunk, int x, int y, int z) {
         int savedLightValue = chunk.getSavedLightValue(EnumSkyBlock.Block, x, y, z);
+        if (savedLightValue == 15) {
+            return savedLightValue;
+        }
         int bx = x + (chunk.xPosition * 16);
         int bz = z + (chunk.zPosition * 16);
         Block block = chunk.getBlock(x, y, z);

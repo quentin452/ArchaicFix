@@ -161,6 +161,13 @@ public class LightingEngine implements ILightingEngine {
      */
     @Override
     public void processLightUpdates() {
+        // todo need to fix thread safety
+       /* Stream.of(EnumSkyBlock.Sky, EnumSkyBlock.Block)
+                .parallel()
+                .limit(4)
+                .forEach(this::processLightUpdatesForType);
+
+        */
         this.processLightUpdatesForType(EnumSkyBlock.Sky);
         this.processLightUpdatesForType(EnumSkyBlock.Block);
     }
@@ -170,26 +177,20 @@ public class LightingEngine implements ILightingEngine {
      */
     @Override
     public void processLightUpdatesForType(final EnumSkyBlock lightType) {
-        // We only want to perform updates if we're being called from a tick event on the client
-        // There are many locations in the client code which will end up making calls to this method, usually from
-        // other threads.
-        if (this.world.isRemote && !this.isCallingFromMainThread()) {
-            return;
-        }
+        if (!this.world.isRemote || this.isCallingFromMainThread()) {
+            final PooledLongQueue queue = this.queuedLightUpdates[lightType.ordinal()];
 
-        final PooledLongQueue queue = this.queuedLightUpdates[lightType.ordinal()];
+            if (queue.isEmpty()) {
+                return;
+            }
 
-        // Quickly check if the queue is empty before we acquire a more expensive lock.
-        if (queue.isEmpty()) {
-            return;
-        }
+            this.acquireLock();
 
-        this.acquireLock();
-
-        try {
-            this.processLightUpdatesForTypeInner(lightType, queue);
-        } finally {
-            this.releaseLock();
+            try {
+                this.processLightUpdatesForTypeInner(lightType, queue);
+            } finally {
+                this.releaseLock();
+            }
         }
     }
 
@@ -419,7 +420,6 @@ public class LightingEngine implements ILightingEngine {
         }
     }
 
-
     private static int getCachedLightFor(Chunk chunk, ExtendedBlockStorage storage, BlockPos pos, EnumSkyBlock type) {
         int i = pos.getX() & 15;
         int j = pos.getY();
@@ -449,16 +449,8 @@ public class LightingEngine implements ILightingEngine {
 
     private int calculateNewLightFromCursor(final EnumSkyBlock lightType) {
         final Block state = LightingEngineHelpers.posToState(this.curPos, this.curChunk);
-
         final int luminosity = this.getCursorLuminosity(state, lightType);
-        final int opacity;
-
-        if (luminosity >= MAX_LIGHT - 1) {
-            opacity = 1;
-        } else {
-            opacity = this.getPosOpacity(this.curPos, state);
-        }
-
+        final int opacity = (luminosity >= MAX_LIGHT - 1) ? 1 : this.getPosOpacity(this.curPos, state);
         return this.calculateNewLightFromCursor(luminosity, opacity, lightType);
     }
 
@@ -466,38 +458,25 @@ public class LightingEngine implements ILightingEngine {
         if (luminosity >= MAX_LIGHT - opacity) {
             return luminosity;
         }
-
         int newLight = luminosity;
-
         this.fetchNeighborDataFromCursor(lightType);
-
         for (NeighborInfo info : this.neighborInfos) {
-            if (info.chunk == null) {
-                continue;
+            if (info.chunk != null) {
+                newLight = Math.max(info.light - opacity, newLight);
             }
-
-            final int nLight = info.light;
-
-            newLight = Math.max(nLight - opacity, newLight);
         }
-
         return newLight;
     }
 
     private void spreadLightFromCursor(final int curLight, final EnumSkyBlock lightType) {
         this.fetchNeighborDataFromCursor(lightType);
-
         for (NeighborInfo info : this.neighborInfos) {
             final Chunk nChunk = info.chunk;
-
-            if (nChunk == null) {
-                continue;
-            }
-
-            final int newLight = curLight - this.getPosOpacity(info.pos, LightingEngineHelpers.posToState(info.pos, info.section));
-
-            if (newLight > info.light) {
-                this.enqueueBrightening(info.pos, info.key, newLight, nChunk, lightType);
+            if (nChunk != null) {
+                int newLight = curLight - this.getPosOpacity(info.pos, LightingEngineHelpers.posToState(info.pos, info.section));
+                if (newLight > info.light) {
+                    this.enqueueBrightening(info.pos, info.key, newLight, nChunk, lightType);
+                }
             }
         }
     }
@@ -525,9 +504,9 @@ public class LightingEngine implements ILightingEngine {
     }
 
     private static BlockPos.MutableBlockPos decodeWorldCoord(final BlockPos.MutableBlockPos pos, final long longPos) {
-        final int posX = (int) (longPos >> sX & mX) - (1 << lX - 1);
-        final int posY = (int) (longPos >> sY & mY);
-        final int posZ = (int) (longPos >> sZ & mZ) - (1 << lZ - 1);
+        final int posX = (int) ((longPos >> sX) & mX) - (1 << (lX - 1));
+        final int posY = (int) ((longPos >> sY) & mY);
+        final int posZ = (int) ((longPos >> sZ) & mZ) - (1 << (lZ - 1));
 
         return pos.setPos(posX, posY, posZ);
     }
