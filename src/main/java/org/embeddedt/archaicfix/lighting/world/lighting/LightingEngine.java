@@ -235,148 +235,167 @@ public class LightingEngine implements ILightingEngine {
     }
 
     private void processLightUpdatesForTypeInner(final EnumSkyBlock lightType, final PooledLongQueue queue) {
-        //avoid nested calls
+        checkIfAlreadyUpdating();
+
+        this.updating = true;
+        this.curChunkIdentifier = -1; // reset chunk cache
+
+        processQueuedUpdates(lightType, queue);
+
+        processInitialBrightenings(lightType);
+        processInitialDarkenings(lightType);
+
+        iterateThroughQueuedUpdates(lightType);
+
+        this.profiler.endSection();
+        this.updating = false;
+    }
+
+    private void checkIfAlreadyUpdating() {
         if (this.updating) {
             throw new IllegalStateException("Already processing updates!");
         }
+    }
 
-        this.updating = true;
-
-        this.curChunkIdentifier = -1; //reset chunk cache
-
+    private void processQueuedUpdates(final EnumSkyBlock lightType, final PooledLongQueue queue) {
         this.profiler.startSection("lighting");
-
         this.profiler.startSection("checking");
 
         this.queueIt = queue.iterator();
 
-        //process the queued updates and enqueue them for further processing
         while (this.nextItem()) {
             if (this.curChunk == null) {
                 continue;
             }
 
-            final int oldLight = this.getCursorCachedLight(lightType);
-            final int newLight = this.calculateNewLightFromCursor(lightType);
-
-            if (oldLight < newLight) {
-                //don't enqueue directly for brightening in order to avoid duplicate scheduling
-                this.initialBrightenings.add(((long) newLight << sL) | this.curData);
-            } else if (oldLight > newLight) {
-                //don't enqueue directly for darkening in order to avoid duplicate scheduling
-                this.initialDarkenings.add(this.curData);
-            }
+            processQueuedUpdate(lightType);
         }
+    }
 
+    private void processQueuedUpdate(final EnumSkyBlock lightType) {
+        final int oldLight = this.getCursorCachedLight(lightType);
+        final int newLight = this.calculateNewLightFromCursor(lightType);
+
+        if (oldLight < newLight) {
+            this.initialBrightenings.add(((long) newLight << sL) | this.curData);
+        } else if (oldLight > newLight) {
+            this.initialDarkenings.add(this.curData);
+        }
+    }
+
+    private void processInitialBrightenings(final EnumSkyBlock lightType) {
         this.queueIt = this.initialBrightenings.iterator();
 
         while (this.nextItem()) {
-            final int newLight = (int) (this.curData >> sL & mL);
-
-            if (newLight > this.getCursorCachedLight(lightType)) {
-                //Sets the light to newLight to only schedule once. Clear leading bits of curData for later
-                this.enqueueBrightening(this.curPos, this.curData & mPos, newLight, this.curChunk, lightType);
-            }
+            processInitialBrightening(lightType);
         }
+    }
 
+    private void processInitialBrightening(final EnumSkyBlock lightType) {
+        final int newLight = (int) (this.curData >> sL & mL);
+
+        if (newLight > this.getCursorCachedLight(lightType)) {
+            this.enqueueBrightening(this.curPos, this.curData & mPos, newLight, this.curChunk, lightType);
+        }
+    }
+
+    private void processInitialDarkenings(final EnumSkyBlock lightType) {
         this.queueIt = this.initialDarkenings.iterator();
 
         while (this.nextItem()) {
-            final int oldLight = this.getCursorCachedLight(lightType);
-
-            if (oldLight != 0) {
-                //Sets the light to 0 to only schedule once
-                this.enqueueDarkening(this.curPos, this.curData, oldLight, this.curChunk, lightType);
-            }
+            processInitialDarkening(lightType);
         }
+    }
 
-        this.profiler.endSection();
+    private void processInitialDarkening(final EnumSkyBlock lightType) {
+        final int oldLight = this.getCursorCachedLight(lightType);
 
-        //Iterate through enqueued updates (brightening and darkening in parallel) from brightest to darkest so that we only need to iterate once
+        if (oldLight != 0) {
+            this.enqueueDarkening(this.curPos, this.curData, oldLight, this.curChunk, lightType);
+        }
+    }
+
+    private void iterateThroughQueuedUpdates(final EnumSkyBlock lightType) {
         for (int curLight = MAX_LIGHT; curLight >= 0; --curLight) {
             this.profiler.startSection("darkening");
-
             this.queueIt = this.queuedDarkenings[curLight].iterator();
 
             while (this.nextItem()) {
-                if (this.getCursorCachedLight(lightType) >= curLight) //don't darken if we got brighter due to some other change
-                {
-                    continue;
-                }
-
-                final Block state = LightingEngineHelpers.posToState(this.curPos, this.curChunk);
-                final int luminosity = this.getCursorLuminosity(state, lightType);
-                final int opacity; //if luminosity is high enough, opacity is irrelevant
-
-                if (luminosity >= MAX_LIGHT - 1) {
-                    opacity = 1;
-                } else {
-                    opacity = this.getPosOpacity(this.curPos, state);
-                }
-
-                //only darken neighbors if we indeed became darker
-                if (this.calculateNewLightFromCursor(luminosity, opacity, lightType) < curLight) {
-                    //need to calculate new light value from neighbors IGNORING neighbors which are scheduled for darkening
-                    int newLight = luminosity;
-
-                    this.fetchNeighborDataFromCursor(lightType);
-
-                    for (NeighborInfo info : this.neighborInfos) {
-                        final Chunk nChunk = info.chunk;
-
-                        if (nChunk == null) {
-                            continue;
-                        }
-
-                        final int nLight = info.light;
-
-                        if (nLight == 0) {
-                            continue;
-                        }
-
-                        final BlockPos.MutableBlockPos nPos = info.pos;
-
-                        if (curLight - this.getPosOpacity(nPos, LightingEngineHelpers.posToState(nPos, info.section)) >= nLight) //schedule neighbor for darkening if we possibly light it
-                        {
-                            this.enqueueDarkening(nPos, info.key, nLight, nChunk, lightType);
-                        } else //only use for new light calculation if not
-                        {
-                            //if we can't darken the neighbor, no one else can (because of processing order) -> safe to let us be illuminated by it
-                            newLight = Math.max(newLight, nLight - opacity);
-                        }
-                    }
-
-                    //schedule brightening since light level was set to 0
-                    this.enqueueBrighteningFromCursor(newLight, lightType);
-                } else //we didn't become darker, so we need to re-set our initial light value (was set to 0) and notify neighbors
-                {
-                    this.enqueueBrighteningFromCursor(curLight, lightType); //do not spread to neighbors immediately to avoid scheduling multiple times
-                }
+                processQueuedDarkening(lightType, curLight);
             }
 
             this.profiler.endStartSection("brightening");
-
             this.queueIt = this.queuedBrightenings[curLight].iterator();
 
             while (this.nextItem()) {
-                final int oldLight = this.getCursorCachedLight(lightType);
-
-                if (oldLight == curLight) //only process this if nothing else has happened at this position since scheduling
-                {
-                    this.world.func_147479_m(this.curPos.getX(), this.curPos.getY(), this.curPos.getZ());
-
-                    if (curLight > 1) {
-                        this.spreadLightFromCursor(curLight, lightType);
-                    }
-                }
+                processQueuedBrightening(lightType, curLight);
             }
 
             this.profiler.endSection();
         }
+    }
+    private void processQueuedDarkening(final EnumSkyBlock lightType, final int curLight) {
+        if (this.getCursorCachedLight(lightType) >= curLight) {
+            return;
+        }
 
-        this.profiler.endSection();
+        final Block state = LightingEngineHelpers.posToState(this.curPos, this.curChunk);
+        final int luminosity = this.getCursorLuminosity(state, lightType);
+        final int opacity;
 
-        this.updating = false;
+        if (luminosity >= MAX_LIGHT - 1) {
+            opacity = 1;
+        } else {
+            opacity = this.getPosOpacity(this.curPos, state);
+        }
+
+        // Only darken neighbors if we indeed became darker
+        if (this.calculateNewLightFromCursor(luminosity, opacity, lightType) < curLight) {
+            // Need to calculate new light value from neighbors IGNORING neighbors which are scheduled for darkening
+            int newLight = luminosity;
+
+            this.fetchNeighborDataFromCursor(lightType);
+
+            for (NeighborInfo info : this.neighborInfos) {
+                final Chunk nChunk = info.chunk;
+
+                if (nChunk == null) {
+                    continue;
+                }
+
+                final int nLight = info.light;
+
+                if (nLight == 0) {
+                    continue;
+                }
+
+                final BlockPos.MutableBlockPos nPos = info.pos;
+
+                if (curLight - this.getPosOpacity(nPos, LightingEngineHelpers.posToState(nPos, info.section)) >= nLight) {
+                    this.enqueueDarkening(nPos, info.key, nLight, nChunk, lightType);
+                } else {
+                    newLight = Math.max(newLight, nLight - opacity);
+                }
+            }
+
+            // Schedule brightening since light level was set to 0
+            this.enqueueBrighteningFromCursor(newLight, lightType);
+        } else {
+            // We didn't become darker, so we need to re-set our initial light value (was set to 0) and notify neighbors
+            this.enqueueBrighteningFromCursor(curLight, lightType); // Do not spread to neighbors immediately to avoid scheduling multiple times
+        }
+    }
+
+    private void processQueuedBrightening(final EnumSkyBlock lightType, final int curLight) {
+        final int oldLight = this.getCursorCachedLight(lightType);
+
+        if (oldLight == curLight) {
+            this.world.func_147479_m(this.curPos.getX(), this.curPos.getY(), this.curPos.getZ());
+
+            if (curLight > 1) {
+                this.spreadLightFromCursor(curLight, lightType);
+            }
+        }
     }
 
     /**
