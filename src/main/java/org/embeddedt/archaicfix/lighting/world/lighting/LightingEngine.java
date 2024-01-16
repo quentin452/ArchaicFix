@@ -427,40 +427,42 @@ public class LightingEngine implements ILightingEngine {
      * Gets data for neighbors of <code>curPos</code> and saves the results into neighbor state data members. If a neighbor can't be accessed/doesn't exist, the corresponding entry in <code>neighborChunks</code> is <code>null</code> - others are not reset
      */
     private void fetchNeighborDataFromCursor(final EnumSkyBlock lightType) {
-        //only update if curPos was changed
         if (this.isNeighborDataValid) {
             return;
         }
 
         this.isNeighborDataValid = true;
 
-        for (int i = 0; i < this.neighborInfos.length; ++i) {
-            NeighborInfo info = this.neighborInfos[i];
+        for (int i = 0; i < neighborInfos.length; i++) {
+            NeighborInfo info = neighborInfos[i];
+            updateNeighborInfo(info, i, lightType);
+        }
+    }
 
-            final long nLongPos = info.key = this.curData + neighborShifts[i];
+    private void updateNeighborInfo(NeighborInfo info, int index, EnumSkyBlock lightType) {
+        final long newLongPos = info.key = this.curData + neighborShifts[index];
 
-            if ((nLongPos & yCheck) != 0) {
-                info.chunk = null;
-                info.section = null;
-                continue;
-            }
+        if ((newLongPos & yCheck) != 0) {
+            info.chunk = null;
+            info.section = null;
+            return;
+        }
 
-            final BlockPos.MutableBlockPos nPos = decodeWorldCoord(info.pos, nLongPos);
+        final BlockPos.MutableBlockPos newPos = decodeWorldCoord(info.pos, newLongPos);
 
-            final Chunk nChunk;
+        final Chunk newChunk;
 
-            if ((nLongPos & mChunk) == this.curChunkIdentifier) {
-                nChunk = info.chunk = this.curChunk;
-            } else {
-                nChunk = info.chunk = this.getChunk(nPos);
-            }
+        if ((newLongPos & mChunk) == this.curChunkIdentifier) {
+            newChunk = info.chunk = this.curChunk;
+        } else {
+            newChunk = info.chunk = this.getChunk(newPos);
+        }
 
-            if (nChunk != null) {
-                ExtendedBlockStorage nSection = nChunk.getBlockStorageArray()[nPos.getY() >> 4];
+        if (newChunk != null) {
+            ExtendedBlockStorage newSection = newChunk.getBlockStorageArray()[newPos.getY() >> 4];
 
-                info.light = getCachedLightFor(nChunk, nSection, nPos, lightType);
-                info.section = nSection;
-            }
+            info.light = getCachedLightFor(newChunk, newSection, newPos, lightType);
+            info.section = newSection;
         }
     }
 
