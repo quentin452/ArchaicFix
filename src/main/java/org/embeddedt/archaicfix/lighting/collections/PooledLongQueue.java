@@ -60,6 +60,42 @@ public class PooledLongQueue {
 
         ++this.size;
     }
+    /**
+     * Not thread-safe! Removes an encoded long value from this queue.
+     * @param val The encoded value to remove
+     */
+    public void remove(final long val) {
+        Segment currentSegment = this.cur;
+
+        while (currentSegment != null) {
+            for (int i = 0; i < currentSegment.index; i++) {
+                if (currentSegment.longArray[i] == val) {
+                    // Found the value to remove, shift elements to cover the gap
+                    System.arraycopy(currentSegment.longArray, i + 1, currentSegment.longArray, i, currentSegment.index - i - 1);
+                    currentSegment.index--;
+                    this.size--;
+
+                    // Check if the segment is empty after removal
+                    if (currentSegment.index == 0) {
+                        // Remove the empty segment
+                        if (this.cur == currentSegment) {
+                            this.cur = currentSegment.next;
+                        }
+
+                        if (this.last == currentSegment) {
+                            this.last = null;
+                        }
+
+                        currentSegment.release();
+                    }
+
+                    return;
+                }
+            }
+
+            currentSegment = currentSegment.next;
+        }
+    }
 
     /**
      * Not thread safe! Creates an iterator over the values in this queue. Values will be returned in a FIFO fashion.

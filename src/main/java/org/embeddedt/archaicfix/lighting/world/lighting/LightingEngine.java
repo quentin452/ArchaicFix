@@ -273,12 +273,20 @@ public class LightingEngine implements ILightingEngine {
     }
 
     private void processQueuedUpdate(final EnumSkyBlock lightType) {
+        if (this.curChunk == null) {
+            return;
+        }
+
         final int oldLight = this.getCursorCachedLight(lightType);
         final int newLight = this.calculateNewLightFromCursor(lightType);
 
         if (oldLight < newLight) {
+            // Remove any previous darkening entries for this position
+            this.queuedDarkenings[oldLight].remove(this.curData);
             this.initialBrightenings.add(((long) newLight << sL) | this.curData);
         } else if (oldLight > newLight) {
+            // Remove any previous brightening entries for this position
+            this.queuedBrightenings[oldLight].remove(this.curData);
             this.initialDarkenings.add(this.curData);
         }
     }
@@ -292,12 +300,20 @@ public class LightingEngine implements ILightingEngine {
     }
 
     private void processInitialBrightening(final EnumSkyBlock lightType) {
-        final int newLight = (int) (this.curData >> sL & mL);
+        if (this.curChunk == null) {
+            return;
+        }
 
-        if (newLight > this.getCursorCachedLight(lightType)) {
+        final int newLight = (int) (this.curData >> sL & mL);
+        final int cachedLight = this.getCursorCachedLight(lightType);
+
+        if (newLight > cachedLight) {
+            // Remove any previous darkening entries for this position
+            this.queuedDarkenings[cachedLight].remove(this.curData);
             this.enqueueBrightening(this.curPos, this.curData & mPos, newLight, this.curChunk, lightType);
         }
     }
+
 
     private void processInitialDarkenings(final EnumSkyBlock lightType) {
         this.queueIt = this.initialDarkenings.iterator();
@@ -308,9 +324,15 @@ public class LightingEngine implements ILightingEngine {
     }
 
     private void processInitialDarkening(final EnumSkyBlock lightType) {
+        if (this.curChunk == null) {
+            return;
+        }
+
         final int oldLight = this.getCursorCachedLight(lightType);
 
         if (oldLight != 0) {
+            // Remove any previous brightening entries for this position
+            this.queuedBrightenings[oldLight].remove(this.curData);
             this.enqueueDarkening(this.curPos, this.curData, oldLight, this.curChunk, lightType);
         }
     }
@@ -351,6 +373,8 @@ public class LightingEngine implements ILightingEngine {
 
         // Only darken neighbors if we indeed became darker
         if (this.calculateNewLightFromCursor(luminosity, opacity, lightType) < curLight) {
+            // Remove any previous brightening entries for this position
+            this.queuedBrightenings[curLight].remove(this.curData);
             // Need to calculate new light value from neighbors IGNORING neighbors which are scheduled for darkening
             int newLight = luminosity;
 
@@ -372,6 +396,7 @@ public class LightingEngine implements ILightingEngine {
                 final BlockPos.MutableBlockPos nPos = info.pos;
 
                 if (curLight - this.getPosOpacity(nPos, LightingEngineHelpers.posToState(nPos, info.section)) >= nLight) {
+                    this.queuedDarkenings[nLight].remove(info.key);
                     this.enqueueDarkening(nPos, info.key, nLight, nChunk, lightType);
                 } else {
                     newLight = Math.max(newLight, nLight - opacity);
