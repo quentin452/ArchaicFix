@@ -195,10 +195,8 @@ public class LightingEngine implements ILightingEngine {
         final int oldLight = this.getCursorCachedLight(lightType);
         final int newLight = this.calculateNewLightFromCursor(lightType);
         if (oldLight < newLight) {
-            this.queuedDarkenings[oldLight].remove(this.curData);
             this.initialBrightenings.add(((long) newLight << sL) | this.curData);
         } else if (oldLight > newLight) {
-            this.queuedBrightenings[oldLight].remove(this.curData);
             this.initialDarkenings.add(this.curData);
         }
     }
@@ -218,7 +216,6 @@ public class LightingEngine implements ILightingEngine {
         final int newLight = (int) (this.curData >> sL & mL);
         final int cachedLight = this.getCursorCachedLight(lightType);
         if (newLight > cachedLight) {
-            this.queuedDarkenings[cachedLight].remove(this.curData);
             this.enqueueBrightening(this.curPos, this.curData & mPos, newLight, this.curChunk, lightType);
         }
     }
@@ -237,7 +234,6 @@ public class LightingEngine implements ILightingEngine {
         }
         final int oldLight = this.getCursorCachedLight(lightType);
         if (oldLight != 0) {
-            this.queuedBrightenings[oldLight].remove(this.curData);
             this.enqueueDarkening(this.curPos, this.curData, oldLight, this.curChunk, lightType);
         }
     }
@@ -271,7 +267,6 @@ public class LightingEngine implements ILightingEngine {
             opacity = this.getPosOpacity(this.curPos, state);
         }
         if (this.calculateNewLightFromCursor(luminosity, opacity, lightType) < curLight) {
-            this.queuedBrightenings[curLight].remove(this.curData);
             int newLight = luminosity;
             this.fetchNeighborDataFromCursor(lightType);
             for (NeighborInfo info : this.neighborInfos) {
@@ -288,7 +283,6 @@ public class LightingEngine implements ILightingEngine {
                 final BlockPos.MutableBlockPos nPos = info.pos;
 
                 if (curLight - this.getPosOpacity(nPos, LightingEngineHelpers.posToState(nPos, info.section)) >= nLight) {
-                    this.queuedDarkenings[nLight].remove(info.key);
                     this.enqueueDarkening(nPos, info.key, nLight, nChunk, lightType);
                 } else {
                     newLight = Math.max(newLight, nLight - opacity);
