@@ -18,14 +18,11 @@ import org.embeddedt.archaicfix.lighting.api.IChunkLighting;
 import org.embeddedt.archaicfix.lighting.api.ILightingEngine;
 import org.embeddedt.archaicfix.lighting.collections.PooledLongQueue;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class LightingEngine implements ILightingEngine {
-    private static final boolean ENABLE_ILLEGAL_THREAD_ACCESS_WARNINGS = true;
-
     private static final int MAX_SCHEDULED_COUNT = 1 << 22;
-    private final Thread ownedThread = Thread.currentThread();
-
     private static final int MAX_LIGHT = 15;
     private final World world;
     private final Profiler profiler;
@@ -34,7 +31,7 @@ public class LightingEngine implements ILightingEngine {
     private final PooledLongQueue[] queuedBrightenings = new PooledLongQueue[MAX_LIGHT + 1];
     private final PooledLongQueue initialBrightenings;
     private final PooledLongQueue initialDarkenings;
-    private boolean updating = false;
+    private final AtomicBoolean updating = new AtomicBoolean(false);
     private static final int lX = 26, lY = 8, lZ = 26, lL = 4;
     private static final int sZ = 0, sX = sZ + lZ, sY = sX + lX, sL = sY + lY;
     private static final long mX = (1L << lX) - 1, mY = (1L << lY) - 1, mZ = (1L << lZ) - 1, mL = (1L << lL) - 1, mPos = (mY << sY) | (mX << sX) | (mZ << sZ);
@@ -55,7 +52,6 @@ public class LightingEngine implements ILightingEngine {
     private boolean isNeighborDataValid = false;
     private final NeighborInfo[] neighborInfos = new NeighborInfo[6];
     private PooledLongQueue.LongQueueIterator queueIt;
-    private final ReentrantLock lock = new ReentrantLock();
 
     public LightingEngine(final World world) {
         this.world = world;
@@ -80,12 +76,7 @@ public class LightingEngine implements ILightingEngine {
 
     @Override
     public void scheduleLightUpdate(final EnumSkyBlock lightType, final int xIn, final int yIn, final int zIn) {
-        this.acquireLock();
-        try {
-            this.scheduleLightUpdate(lightType, encodeWorldCoord(xIn, yIn, zIn));
-        } finally {
-            this.releaseLock();
-        }
+        this.scheduleLightUpdate(lightType, encodeWorldCoord(xIn, yIn, zIn));
     }
 
     private void scheduleLightUpdate(final EnumSkyBlock lightType, final long pos) {
@@ -109,12 +100,7 @@ public class LightingEngine implements ILightingEngine {
             if (queue.isEmpty()) {
                 return;
             }
-            this.acquireLock();
-            try {
-                this.processLightUpdatesForTypeInner(lightType, queue);
-            } finally {
-                this.releaseLock();
-            }
+            this.processLightUpdatesForTypeInner(lightType, queue);
         }
     }
 
@@ -123,56 +109,17 @@ public class LightingEngine implements ILightingEngine {
         return Minecraft.getMinecraft().func_152345_ab();
     }
 
-    private void acquireLock() {
-        if (!this.lock.tryLock()) {
-            // If we cannot lock, something has gone wrong... Only one thread should ever acquire the lock.
-            // Validate that we're on the right thread immediately so we can gather information.
-            // It is NEVER valid to call World methods from a thread other than the owning thread of the world instance.
-            // Users can safely disable this warning, however it will not resolve the issue.
-            if (ENABLE_ILLEGAL_THREAD_ACCESS_WARNINGS) {
-                Thread current = Thread.currentThread();
-
-                if (current != this.ownedThread) {
-                    IllegalAccessException e = new IllegalAccessException(String.format("World is owned by '%s' (ID: %s)," +
-                                    " but was accessed from thread '%s' (ID: %s)",
-                            this.ownedThread.getName(), this.ownedThread.getId(), current.getName(), current.getId()));
-
-                    ArchaicLogger.LOGGER.warn(
-                            "Something (likely another mod) has attempted to modify the world's state from the wrong thread!\n" +
-                                    "This is *bad practice* and can cause severe issues in your game. Phosphor has done as best as it can to mitigate this violation," +
-                                    " but it may negatively impact performance or introduce stalls.\nIn a future release, this violation may result in a hard crash instead" +
-                                    " of the current soft warning. You should report this issue to our issue tracker with the following stacktrace information.\n(If you are" +
-                                    " aware you have misbehaving mods and cannot resolve this issue, you can safely disable this warning by setting" +
-                                    " `enable_illegal_thread_access_warnings` to `false` in Phosphor's configuration file for the time being.)", e);
-
-                }
-
-            }
-
-            // Wait for the lock to be released. This will likely introduce unwanted stalls, but will mitigate the issue.
-            this.lock.lock();
-        }
-    }
-
-    private void releaseLock() {
-        this.lock.unlock();
-    }
-
     private void processLightUpdatesForTypeInner(final EnumSkyBlock lightType, final PooledLongQueue queue) {
-        checkIfAlreadyUpdating();
-        this.updating = true;
-        this.curChunkIdentifier = -1;
-        processQueuedUpdates(lightType, queue);
-        processInitialBrightenings(lightType);
-        processInitialDarkenings(lightType);
-        iterateThroughQueuedUpdates(lightType);
-        this.profiler.endSection();
-        this.updating = false;
-    }
-
-    private void checkIfAlreadyUpdating() {
-        if (this.updating) {
-            throw new IllegalStateException("Already processing updates!");
+        if (this.updating.compareAndSet(false, true)) {
+            try {
+                this.curChunkIdentifier = -1;
+                processQueuedUpdates(lightType, queue);
+                processInitialBrightenings(lightType);
+                processInitialDarkenings(lightType);
+                iterateThroughQueuedUpdates(lightType);
+            } finally {
+                this.updating.set(false);
+            }
         }
     }
 
@@ -402,19 +349,19 @@ public class LightingEngine implements ILightingEngine {
     private void enqueueBrightening(final BlockPos pos, final long longPos, final int newLight, final Chunk chunk, final EnumSkyBlock lightType) {
         this.queuedBrightenings[newLight].add(longPos);
 
-        chunk.setLightValue(lightType, pos.getX() & 15, pos.getY(), pos.getZ() & 15, newLight);
+        chunk.setLightValue(lightType, pos.getX() & 15, pos.getY(), pos.getZ() &15, newLight);
     }
 
     private void enqueueDarkening(final BlockPos pos, final long longPos, final int oldLight, final Chunk chunk, final EnumSkyBlock lightType) {
         this.queuedDarkenings[oldLight].add(longPos);
 
-        chunk.setLightValue(lightType, pos.getX() & 15, pos.getY(), pos.getZ() & 15, 0);
+        chunk.setLightValue(lightType, pos.getX() & 15, pos.getY(), pos.getZ() &15, 0);
     }
 
     private static BlockPos.MutableBlockPos decodeWorldCoord(final BlockPos.MutableBlockPos pos, final long longPos) {
         final int posX = (int) ((longPos >> sX) & mX) - (1 << (lX - 1));
         final int posY = (int) ((longPos >> sY) & mY);
-        final int posZ = (int) ((longPos >> sZ) & mZ) - (1 << (lZ - 1));
+        final int posZ = (int) ((longPos >> sZ) & mZ) - (1 << (lZ -1));
         return pos.setPos(posX, posY, posZ);
     }
 
@@ -446,7 +393,7 @@ public class LightingEngine implements ILightingEngine {
 
     private int getCursorLuminosity(final Block state, final EnumSkyBlock lightType) {
         if (lightType == EnumSkyBlock.Sky) {
-            if (this.curChunk.canBlockSeeTheSky(this.curPos.getX() & 15, this.curPos.getY(), this.curPos.getZ() & 15)) {
+            if (this.curChunk.canBlockSeeTheSky(this.curPos.getX() & 15, this.curPos.getY(), this.curPos.getZ() &15)) {
                 return EnumSkyBlock.Sky.defaultLightValue;
             } else {
                 return 0;
@@ -474,4 +421,3 @@ public class LightingEngine implements ILightingEngine {
         final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
     }
 }
-
