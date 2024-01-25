@@ -1,7 +1,10 @@
 package org.embeddedt.archaicfix.lighting.collections;
 
+import lombok.Getter;
+
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 //Implement own queue with pooled segments to reduce allocation costs and reduce idle memory footprint
 public class PooledLongQueue {
@@ -10,12 +13,20 @@ public class PooledLongQueue {
 
     private final Pool pool;
 
-    private Segment cur, last;
+    private Segment cur;
+    private Segment last;
 
     private int size = 0;
 
+    /**
+     * -- GETTER --
+     *  Thread-safe method to check whether or not this queue has work to do. Significantly cheaper than acquiring a lock.
+     *
+     * @return True if the queue is empty, otherwise false
+     */
     // Stores whether or not the queue is empty. Updates to this field will be seen by all threads immediately. Writes
     // to volatile fields are generally quite a bit more expensive, so we avoid repeatedly setting this flag to true.
+    @Getter
     private volatile boolean empty;
 
     public PooledLongQueue(Pool pool) {
@@ -29,14 +40,6 @@ public class PooledLongQueue {
      */
     public int size() {
         return this.size;
-    }
-
-    /**
-     * Thread-safe method to check whether or not this queue has work to do. Significantly cheaper than acquiring a lock.
-     * @return True if the queue is empty, otherwise false
-     */
-    public boolean isEmpty() {
-        return this.empty;
     }
 
     /**
@@ -162,22 +165,23 @@ public class PooledLongQueue {
     }
 
     public static class Pool {
-        private final Deque<Segment> segmentPool = new ArrayDeque<>();
+        private final ConcurrentLinkedDeque<Segment> segmentPool = new ConcurrentLinkedDeque<>();
 
         private Segment acquire() {
-            if (this.segmentPool.isEmpty()) {
+            Segment segment = this.segmentPool.poll();
+            if (segment == null) {
                 return new Segment(this);
             }
-
-            return this.segmentPool.pop();
+            return segment;
         }
 
         private void release(Segment segment) {
             if (this.segmentPool.size() < CACHED_QUEUE_SEGMENTS_COUNT) {
-                this.segmentPool.push(segment);
+                this.segmentPool.offer(segment);
             }
         }
     }
+
 
     private static class Segment {
         private final long[] longArray = new long[QUEUE_SEGMENT_SIZE];

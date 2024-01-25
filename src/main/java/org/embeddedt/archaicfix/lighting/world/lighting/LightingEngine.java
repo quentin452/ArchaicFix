@@ -94,7 +94,7 @@ public class LightingEngine implements ILightingEngine {
     }
 
     @Override
-    public void processLightUpdatesForType(final EnumSkyBlock lightType) {
+    public synchronized void processLightUpdatesForType(final EnumSkyBlock lightType) {
         if (!this.world.isRemote || this.isCallingFromMainThread()) {
             final PooledLongQueue queue = this.queuedLightUpdates[lightType.ordinal()];
             if (queue.isEmpty()) {
