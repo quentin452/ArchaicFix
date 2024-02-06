@@ -13,13 +13,11 @@ import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IChunkProvider;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
-import org.embeddedt.archaicfix.ArchaicLogger;
 import org.embeddedt.archaicfix.lighting.api.IChunkLighting;
 import org.embeddedt.archaicfix.lighting.api.ILightingEngine;
 import org.embeddedt.archaicfix.lighting.collections.PooledLongQueue;
 
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class LightingEngine implements ILightingEngine {
     private static final int MAX_SCHEDULED_COUNT = 1 << 22;
@@ -97,7 +95,7 @@ public class LightingEngine implements ILightingEngine {
     public synchronized void processLightUpdatesForType(final EnumSkyBlock lightType) {
         if (!this.world.isRemote || this.isCallingFromMainThread()) {
             final PooledLongQueue queue = this.queuedLightUpdates[lightType.ordinal()];
-            if (queue.isEmpty()) {
+            if (queue.size() == 0) {
                 return;
             }
             this.processLightUpdatesForTypeInner(lightType, queue);
@@ -388,7 +386,7 @@ public class LightingEngine implements ILightingEngine {
     }
 
     private int getCursorCachedLight(final EnumSkyBlock lightType) {
-        if (this.curChunk == null || this.curPos == null) {
+        if (this.curChunk == null) {
             return 0;
         }
         return ((IChunkLighting) this.curChunk).getCachedLightFor(lightType, this.curPos.getX(), this.curPos.getY(), this.curPos.getZ());
