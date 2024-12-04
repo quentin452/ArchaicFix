@@ -282,29 +282,43 @@ public class LightingEngine implements ILightingEngine {
     }
 
     private static int getCachedLightFor(Chunk chunk, ExtendedBlockStorage storage, BlockPos pos, EnumSkyBlock type) {
-        int i = pos.getX() & 15;
-        int j = pos.getY();
-        int k = pos.getZ() & 15;
+        int i = pos.getX() & 15; // Local X within the chunk section
+        int j = pos.getY(); // Global Y coordinate
+        int k = pos.getZ() & 15; // Local Z within the chunk section
+
+        // If the storage is null, handle it based on the light type
         if (storage == null) {
             if (type == EnumSkyBlock.Sky && chunk.canBlockSeeTheSky(i, j, k)) {
                 return type.defaultLightValue;
             } else {
                 return 0;
             }
-        } else if (type == EnumSkyBlock.Sky) {
+        }
+
+        // Ensure Y is within the valid range for the storage
+        int localY = j & 15;
+        if (localY < 0 || localY >= 16) {
+            return 0; // Out-of-bounds access
+        }
+
+        // Handle sky light
+        if (type == EnumSkyBlock.Sky) {
             if (chunk.worldObj.provider.hasNoSky) {
                 return 0;
             } else {
-                return storage.getExtSkylightValue(i, j & 15, k);
-            }
-        } else {
-            if (type == EnumSkyBlock.Block) {
-                return storage.getExtBlocklightValue(i, j & 15, k);
-            } else {
-                return type.defaultLightValue;
+                return storage.getExtSkylightValue(i, localY, k);
             }
         }
+
+        // Handle block light
+        if (type == EnumSkyBlock.Block) {
+            return storage.getExtBlocklightValue(i, localY, k);
+        }
+
+        // Default case
+        return type.defaultLightValue;
     }
+
 
     private int calculateNewLightFromCursor(final EnumSkyBlock lightType) {
         final Block state = LightingEngineHelpers.posToState(this.curPos, this.curChunk);
