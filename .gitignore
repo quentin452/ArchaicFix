@@ -33,3 +33,4 @@ usernamecache.json
 
 # BeefCore, when it's copied into the source tree
 /src/main/java/erogenousbeef/core
+/.vscode
