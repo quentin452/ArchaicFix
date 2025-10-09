@@ -564,6 +564,10 @@ public class Object2ObjectOpenHashMap<T, V> extends AbstractObject2ObjectMap<T, 
 		public MapEntry(int index) {
 			this.index = index;
 		}
+		
+		public void set(int index) {
+			this.index = index;
+		}
 
 		@Override
 		public T getKey() {
